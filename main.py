@@ -83,6 +83,7 @@ class Car(object):
         self.nextCorner = nextCorner
         self.nextCornerDirection = nextCornerDirection
         self.nextCornerSpeed = nextCornerSpeed
+        self.pos = self.t.pos()
 
         self.fwst = 0 #state of forward key
         self.brst = 0 #state of backward key
@@ -97,8 +98,8 @@ class Car(object):
 
     def disableControls(self):
         controls = (("w", "s"), ("Up", "Down"))
-        self.circuit.screen.onkey(None, controls[self.player][0])
-        self.circuit.screen.onkey(None, controls[self.player][1])
+        self.circuit.screen.onkey(None, controls[self.player-1][0])
+        self.circuit.screen.onkey(None, controls[self.player-1][1])
 
     def setControls(self):
         controls = (("w", "s"), ("Up", "Down"))
@@ -120,7 +121,9 @@ class Car(object):
 
     def drive(self, time):
         if self.running == 1:
-            self.prevPos = self.t.pos()#save inital position
+            self.prevPos = self.pos
+            self.pos = self.t.pos()#save inital position
+
 
             #calculate distance and new speed
             if self.fwst == self.brst:
@@ -129,11 +132,11 @@ class Car(object):
                 if self.speed == self.maxSpeed:
                     self.forward = (self.maxSpeed*time)
                 elif self.speed + (self.accel*time) > self.maxSpeed:
-                    transitionTime = (self.maxSpeed-self.speed) / (self.accel*time) #
-                    self.forward = (transitionTime*time * (self.maxSpeed + self.speed) / 2 + (1-transitionTime)*time*self.maxSpeed)
+                    transitionTime = (self.maxSpeed-self.speed) / (self.accel*time+self.speed) #
+                    self.forward = (transitionTime*time * ((self.maxSpeed + self.speed) / 2) + (1-transitionTime)*time*self.maxSpeed)
                     self.speed = self.maxSpeed
                 else:
-                    self.forward = (self.speed + (self.accel*time/2)*time)
+                    self.forward = self.speed*time + self.accel*time/2
                     self.speed = self.speed + self.accel * time
             elif self.brst == 1:
                 if self.speed == 0:
@@ -176,7 +179,8 @@ class Car(object):
                     self.brst = 1 #put on the brakes
                     self.fwst = 0 #stop going forward
                     self.speed -= 200
-                    self.decel = 100 # put decelleration speed very fast
+                    self.decel = self.speed # put decelleration speed very fast
+                    self.speed = self.speed/2
                     self.driftState = 1
                     self.oldTime = time
                     self.totalOldTime = time
@@ -190,7 +194,7 @@ class Car(object):
             else:
                 self.t.forward(self.forward)
 
-            if self.circuit.isFinish(self.prevPos, self.t.pos(), self.player, time):
+            if self.circuit.isFinish(self.prevPos, self.pos, self.player, time):
                 self.lap += 1
 
 
@@ -213,7 +217,7 @@ class Circuit:
         # setup cornerpositions
         self.Corners = [None]*6,[None] * 6
         self.cornerDirection = [0,90,180,270,180,270]
-        self.maxCornerSpeed = [300,400,350,250,600,400]
+        self.maxCornerSpeed = [800,800,800,800,800,800]
 
 
         #setup road
@@ -316,11 +320,12 @@ class Circuit:
         y = self.Finish[player - 1][1]
 
         if y == pos[1] and y == prevPos[1]: #check y-coordinate
+            print(x,prevPos[0],pos[0])
             if prevPos[0] <= x and pos[0] >= x:
                 self.laptime[player - 1][self.carlap[player - 1]] = self.currentLap[player - 1]
                 print(self.currentLap[player - 1])
-                if self.currentLap < self.fastestlap:
-                    self.fastestlap = self.currentLap
+                if self.currentLap[player-1] < self.fastestlap[player-1] or self.fastestlap[player-1] == 0:
+                    self.fastestlap[player-1] = self.currentLap[player-1]
                     print("Fastest!")
                 self.currentLap[player - 1] = 0
                 return 1
@@ -356,15 +361,52 @@ class Circuit:
 
 class World:
     def __init__(self):
-        self.auto = Car("HAM","Renault", "blue", 650, 50, 5, 20, 80),Car("VER","Renault1", "red", 120, 5, 5, 20, 80)
+        self.auto = Car("HAM","Renault", "blue", 1000, 150, 300, 20, 80),Car("VER","Renault1", "red", 1000, 100, 150, 20, 80)
         self.circuit = Circuit("Zandvoort")
-        self.score = tr.Turtle()
-        self.score.ht()
-        self.score.pu()
-
 
         self.circuit.addPlayer(self.auto[0])
         self.circuit.addPlayer(self.auto[1])
+
+        # print scoreboard
+        self.board = tr.Turtle()
+        self.board.pensize(10)
+        self.board.ht()
+        self.board.pu()
+        self.board.setpos(10-self.circuit.width/2,-10+self.circuit.height/2)
+        self.board.pd()
+
+        self.board.pencolor("yellow")
+        self.board.fillcolor("black")
+        self.board.begin_fill()
+        for _ in range(2):
+            self.board.forward(220)
+            self.board.right(90)
+            self.board.forward(80)
+            self.board.right(90)
+        self.board.end_fill()
+        self.board.pu()
+
+
+        self.board.color("magenta")
+        self.style = ('Courier', 12, 'italic')
+        self.textStyle = ('Courier', 12, 'italic')
+        self.carStyle = ('Courier', 20, 'bold')
+        for i in range(self.circuit.players):
+            self.board.setpos(-360, 160 - i * 30)
+            self.board.write(self.auto[i].NAM, font=self.carStyle, align='left')
+        self.board.setpos(-310, 190)
+        self.board.write("current", font=self.textStyle, align='left')
+        self.board.setpos(-220, 190)
+        self.board.write("fastest", font=self.textStyle, align='left')
+
+        #print times of cars
+        self.score = tr.Turtle()
+        self.score.ht()
+        self.score.pu()
+        self.score.color("magenta")
+
+
+
 
         self.auto[0].startRace()
         self.auto[1].startRace()
@@ -372,33 +414,25 @@ class World:
         self.screenTime = 9
         self.circuit.screen.listen()
         self.time = tm.time()
+        self.lastTime = [0.0] * self.circuit.players
 
     def printScore(self):
         self.score.clear()
-        self.score.color("magenta")
-        style = ('Courier', 12, 'italic')
-        textStyle = ('Courier', 12, 'italic')
-        carStyle = ('Courier', 20, 'bold')
-        for i in range(self.circuit.players):
-            self.score.setpos(-360, 160-i*30)
-            self.score.write(self.auto[i].NAM, font=carStyle, align='left')
-        self.score.setpos(-310,190)
-        self.score.write("currentLap",font=textStyle, align='left')
-        self.score.setpos(-190,190)
-        self.score.write("fastestLap",font=textStyle, align='left')
-
         for i in range(self.circuit.players):
             self.score.setpos(-310,165-30*i)
             time = self.format_result(self.circuit.currentLap[i])
             minutes, seconds = divmod(time.seconds, 60)
             millis = round(time.microseconds/ 1000, 0)
-            self.score.write(f"{minutes:02}:{seconds:02}.{millis}",font=style, align='left')
+            self.score.write(f"{seconds:02}.{int(millis)}",font=self.style, align='left')
         for i in range(self.circuit.players):
-            self.score.setpos(-190, 165 - 30 * i)
-            time = self.format_result(self.circuit.fastestlap[i])
-            minutes, seconds = divmod(time.seconds, 60)
-            millis = round(time.microseconds / 1000, 0)
-            self.score.write(f"{minutes:02}:{seconds:02}.{millis}", font=style, align='left')
+
+            if self.lastTime[i] is not self.circuit.fastestlap:
+                self.score.setpos(-220, 165 - 30 * i)
+                time = self.format_result(self.circuit.fastestlap[i])
+                minutes, seconds = divmod(time.seconds, 60)
+                millis = round(time.microseconds / 1000, 0)
+                self.score.write(f"{seconds:02}.{int(millis)}", font=self.style, align='left')
+            self.lastTime[i] = self.circuit.fastestlap[i]
 
     def format_result(self, result):
         seconds = int(result)
